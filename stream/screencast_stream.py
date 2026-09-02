@@ -172,9 +172,11 @@ if (width, height) != (enc_width, enc_height):
     print(f"    redondeando tamaño a pares: {enc_width}x{enc_height}")
 
 # Menos fps para ahorrar CPU; más bitrate y mejor preset para mejor calidad.
-TARGET_FPS = 15
-VIDEO_BITRATE = 8000
-X264_PRESET = "veryfast"  # alternativas: superfast, veryfast, faster
+# Se pueden sobreescribir con variables de entorno.
+TARGET_FPS = int(os.environ.get("TARGET_FPS", 15))
+VIDEO_BITRATE = int(os.environ.get("VIDEO_BITRATE", 8000))
+X264_PRESET = os.environ.get("X264_PRESET", "veryfast")
+KEY_INT = int(os.environ.get("KEY_INT", TARGET_FPS))
 
 # Probamos varios formatos fijos hasta que pipewiresrc negocie.
 # El error original era que pipewiresrc no recibía caps fijas aguas abajo
@@ -202,7 +204,7 @@ for id_prop in id_props:
                 f"videoscale ! "
                 f"video/x-raw, format=I420, width={enc_width}, height={enc_height} ! "
                 f"queue max-size-buffers=2 leaky=downstream ! "
-                f"x264enc tune=zerolatency speed-preset={X264_PRESET} bitrate={VIDEO_BITRATE} ! "
+                f"x264enc tune=zerolatency speed-preset={X264_PRESET} bitrate={VIDEO_BITRATE} key-int-max={KEY_INT} ! "
                 f"h264parse config-interval=1 ! "
                 f"flvmux streamable=true ! "
                 f"rtmpsink location={RTMP_URL}"

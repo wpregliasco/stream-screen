@@ -34,7 +34,12 @@
       const msg = document.getElementById(`msg-${t.id}`);
 
       if (Hls.isSupported()) {
-        const hls = new Hls();
+        const hls = new Hls({
+          liveSyncDurationCount: 1,
+          liveMaxLatencyDurationCount: 2,
+          backBufferLength: 5,
+          maxBufferLength: 10
+        });
         hls.loadSource(m3u8);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
