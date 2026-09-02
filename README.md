@@ -243,7 +243,7 @@ Este modo permite tener un **servidor central** que recibe la pantalla de uno o 
 ```bash
 sudo ufw allow 1935/tcp    # RTMP (docentes publican)
 sudo ufw allow 8888/tcp    # HLS (alumnos reproducen)
-sudo ufw allow 8080/tcp    # Página web del aula
+sudo ufw allow 8090/tcp    # Página web del aula
 ```
 
 3. Iniciar el servidor:
@@ -252,7 +252,7 @@ sudo ufw allow 8080/tcp    # Página web del aula
 ./classroom-server start
 ```
 
-Eso levanta MediaMTX y un servidor HTTP en `http://<ip-del-servidor>:8080`.
+Eso levanta MediaMTX y un servidor HTTP en `http://<ip-del-servidor>:8090`.
 
 ### En la máquina del docente
 
@@ -277,7 +277,7 @@ STREAM_SERVER=192.168.1.10:1935 TEACHER_ID=teacher2 ./stream-screen start
 
 ### En la máquina del alumno
 
-1. Abrir el navegador en `http://<ip-del-servidor>:8080`.
+1. Abrir el navegador en `http://<ip-del-servidor>:8090`.
 2. Elegir el docente y copiar el enlace M3U8, o abrirlo directamente si el navegador soporta HLS (Safari).
 3. También se puede reproducir con VLC, IINA o cualquier reproductor HLS:
 

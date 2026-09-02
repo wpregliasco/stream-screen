@@ -7,52 +7,38 @@ MEDIA_DIR="$BASE_DIR/mediamtx"
 MEDIA_BIN="$MEDIA_DIR/mediamtx"
 WWW_DIR="$BASE_DIR/www"
 
-MEDIA_SESSION="classroom_media"
-WEB_SESSION="classroom_web"
-WEB_PORT="${WEB_PORT:-8080}"
+WEB_PORT="${WEB_PORT:-8090}"
 
 usage() {
     echo "Usage: $0 {start|stop|help}"
     echo
     echo "  start  Launch MediaMTX and the classroom web page"
-    echo "  stop   Stop both atch sessions and the underlying processes"
+    echo "  stop   Stop MediaMTX and the web server"
     echo "  help   Show this message"
     echo
     echo "Environment variables:"
     echo "  WEB_PORT  HTTP port for the classroom page (default: 8080)"
 }
 
-session_exists() {
-    atch list | grep -qE "^$1([[:space:]]|$)"
-}
-
 start() {
-    if session_exists "$MEDIA_SESSION"; then
-        echo "MediaMTX already running in atch session $MEDIA_SESSION"
+    if pgrep -x mediamtx >/dev/null 2>&1; then
+        echo "MediaMTX already running"
     else
-        atch start "$MEDIA_SESSION" sh -c "cd '$MEDIA_DIR' && exec '$MEDIA_BIN'"
-        echo "MediaMTX started in atch session $MEDIA_SESSION"
+        nohup sh -c "cd '$MEDIA_DIR' && exec '$MEDIA_BIN'" >/tmp/classroom-mediamtx.log 2>&1 &
+        echo "MediaMTX started"
     fi
 
-    if session_exists "$WEB_SESSION"; then
-        echo "Web server already running in atch session $WEB_SESSION"
+    if pgrep -f "http.server $WEB_PORT" >/dev/null 2>&1; then
+        echo "Web server already running on port $WEB_PORT"
     else
-        atch start "$WEB_SESSION" python3 -m http.server "$WEB_PORT" --directory "$WWW_DIR"
-        echo "Web server started in atch session $WEB_SESSION on port $WEB_PORT"
+        nohup python3 -m http.server "$WEB_PORT" --directory "$WWW_DIR" >/tmp/classroom-web.log 2>&1 &
+        echo "Web server started on port $WEB_PORT"
     fi
 }
 
 stop() {
-    if session_exists "$WEB_SESSION"; then
-        atch kill "$WEB_SESSION"
-    fi
     pkill -f "http.server $WEB_PORT"
-
-    if session_exists "$MEDIA_SESSION"; then
-        atch kill "$MEDIA_SESSION"
-    fi
-    pkill mediamtx
-
+    pkill -x mediamtx
     echo "classroom server stopped"
 }
 
