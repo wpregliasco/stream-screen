@@ -1,0 +1,83 @@
+#!/bin/sh
+
+SCRIPT=$(readlink -f -- "$0" 2>/dev/null || realpath -- "$0" 2>/dev/null)
+[ -z "$SCRIPT" ] && SCRIPT=$0
+BASE_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT")" && pwd)
+MEDIA_DIR="$BASE_DIR/mediamtx"
+MEDIA_BIN="$MEDIA_DIR/mediamtx"
+CAST_SCRIPT="$BASE_DIR/stream/screencast_stream.py"
+
+MEDIA_SESSION="screen_media"
+CAST_SESSION="screen_cast"
+
+usage() {
+    echo "Usage: $0 {start|stop|help}"
+    echo
+    echo "  start  Launch MediaMTX and screencast_stream.py in atch sessions"
+    echo "  stop   Stop both atch sessions and the underlying processes"
+    echo "  help   Show this message"
+    echo
+    echo "Environment variables for remote streaming:"
+    echo "  STREAM_SERVER  MediaMTX host:port, e.g. 192.168.1.10:1935"
+    echo "  TEACHER_ID     Stream path, e.g. teacher1 (default: screen)"
+}
+
+session_exists() {
+    atch list | grep -qE "^$1([[:space:]]|$)"
+}
+
+start() {
+    TEACHER_ID="${TEACHER_ID:-screen}"
+
+    if [ -z "$STREAM_SERVER" ]; then
+        if session_exists "$MEDIA_SESSION"; then
+            echo "MediaMTX already running in atch session $MEDIA_SESSION"
+        else
+            atch start "$MEDIA_SESSION" sh -c "cd '$MEDIA_DIR' && exec '$MEDIA_BIN'"
+            echo "MediaMTX started in atch session $MEDIA_SESSION"
+        fi
+        RTMP_URL="rtmp://127.0.0.1:1935/$TEACHER_ID"
+    else
+        echo "Using remote MediaMTX at $STREAM_SERVER"
+        RTMP_URL="rtmp://$STREAM_SERVER/$TEACHER_ID"
+    fi
+
+    if session_exists "$CAST_SESSION"; then
+        atch kill "$CAST_SESSION"
+    fi
+
+    atch start "$CAST_SESSION" env RTMP_URL="$RTMP_URL" python3 "$CAST_SCRIPT"
+    echo "screencast_stream.py started in atch session $CAST_SESSION"
+    echo "  publishing to $RTMP_URL"
+}
+
+stop() {
+    if session_exists "$CAST_SESSION"; then
+        atch kill "$CAST_SESSION"
+    fi
+    pkill -f "screencast_stream.py"
+
+    if session_exists "$MEDIA_SESSION"; then
+        atch kill "$MEDIA_SESSION"
+    fi
+    pkill mediamtx
+
+    echo "stream stopped"
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    help|--help|-h|"")
+        usage
+        ;;
+    *)
+        echo "Unknown command: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+esac

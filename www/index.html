@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aula en streaming</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Aula en streaming</h1>
+  <p>Elegí una pantalla para ver. Si el docente aún no inició, el enlace no funcionará.</p>
+  <div id="streams"></div>
+  <script>
+    const host = window.location.hostname;
+    const teachers = [
+      { id: 'teacher1', label: 'Docente 1' },
+      { id: 'teacher2', label: 'Docente 2' }
+    ];
+    const container = document.getElementById('streams');
+    teachers.forEach(t => {
+      const m3u8 = `http://${host}:8888/${t.id}/index.m3u8`;
+      const card = document.createElement('div');
+      card.className = 'stream-card';
+      card.innerHTML = `
+        <h2>${t.label}</h2>
+        <p><a href="${m3u8}">${m3u8}</a></p>
+        <p class="hint">Abrilo con Safari, VLC o cualquier reproductor HLS.</p>
+      `;
+      container.appendChild(card);
+    });
+  </script>
+</body>
+</html>

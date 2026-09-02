@@ -1,0 +1,74 @@
+#!/bin/sh
+
+SCRIPT=$(readlink -f -- "$0" 2>/dev/null || realpath -- "$0" 2>/dev/null)
+[ -z "$SCRIPT" ] && SCRIPT=$0
+BASE_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT")" && pwd)
+MEDIA_DIR="$BASE_DIR/mediamtx"
+MEDIA_BIN="$MEDIA_DIR/mediamtx"
+WWW_DIR="$BASE_DIR/www"
+
+MEDIA_SESSION="classroom_media"
+WEB_SESSION="classroom_web"
+WEB_PORT="${WEB_PORT:-8080}"
+
+usage() {
+    echo "Usage: $0 {start|stop|help}"
+    echo
+    echo "  start  Launch MediaMTX and the classroom web page"
+    echo "  stop   Stop both atch sessions and the underlying processes"
+    echo "  help   Show this message"
+    echo
+    echo "Environment variables:"
+    echo "  WEB_PORT  HTTP port for the classroom page (default: 8080)"
+}
+
+session_exists() {
+    atch list | grep -qE "^$1([[:space:]]|$)"
+}
+
+start() {
+    if session_exists "$MEDIA_SESSION"; then
+        echo "MediaMTX already running in atch session $MEDIA_SESSION"
+    else
+        atch start "$MEDIA_SESSION" sh -c "cd '$MEDIA_DIR' && exec '$MEDIA_BIN'"
+        echo "MediaMTX started in atch session $MEDIA_SESSION"
+    fi
+
+    if session_exists "$WEB_SESSION"; then
+        echo "Web server already running in atch session $WEB_SESSION"
+    else
+        atch start "$WEB_SESSION" python3 -m http.server "$WEB_PORT" --directory "$WWW_DIR"
+        echo "Web server started in atch session $WEB_SESSION on port $WEB_PORT"
+    fi
+}
+
+stop() {
+    if session_exists "$WEB_SESSION"; then
+        atch kill "$WEB_SESSION"
+    fi
+    pkill -f "http.server $WEB_PORT"
+
+    if session_exists "$MEDIA_SESSION"; then
+        atch kill "$MEDIA_SESSION"
+    fi
+    pkill mediamtx
+
+    echo "classroom server stopped"
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    help|--help|-h|"")
+        usage
+        ;;
+    *)
+        echo "Unknown command: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+esac
