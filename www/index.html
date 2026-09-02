@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Aula en streaming</title>
   <link rel="stylesheet" href="style.css">
+  <script src="hls.min.js"></script>
 </head>
 <body>
   <h1>Aula en streaming</h1>
-  <p>Elegí una pantalla para ver. Si el docente aún no inició, el enlace no funcionará.</p>
+  <p>Elegí una pantalla para ver. Si el docente aún no inició, el stream no cargará.</p>
   <div id="streams"></div>
   <script>
     const host = window.location.hostname;
@@ -23,10 +24,38 @@
       card.className = 'stream-card';
       card.innerHTML = `
         <h2>${t.label}</h2>
-        <p><a href="${m3u8}">${m3u8}</a></p>
-        <p class="hint">Abrilo con Safari, VLC o cualquier reproductor HLS.</p>
+        <video id="video-${t.id}" controls playsinline muted></video>
+        <p id="msg-${t.id}" class="hint" style="display:none;"></p>
+        <p class="hint">URL HLS: <a href="${m3u8}">${m3u8}</a></p>
       `;
       container.appendChild(card);
+
+      const video = document.getElementById(`video-${t.id}`);
+      const msg = document.getElementById(`msg-${t.id}`);
+
+      if (Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(m3u8);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            msg.textContent = 'El stream no está disponible. Esperá a que el docente inicie.';
+            msg.style.display = 'block';
+            hls.destroy();
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = m3u8;
+        video.addEventListener('error', () => {
+          msg.textContent = 'El stream no está disponible. Esperá a que el docente inicie.';
+          msg.style.display = 'block';
+        });
+      } else {
+        msg.textContent = 'Tu navegador no soporta HLS. Usá el enlace con VLC o Safari.';
+        msg.style.display = 'block';
+        video.style.display = 'none';
+      }
     });
   </script>
 </body>
