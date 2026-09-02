@@ -1,0 +1,14 @@
+#!/bin/sh
+
+SCRIPT=$(readlink -f -- "$0" 2>/dev/null || realpath -- "$0" 2>/dev/null)
+[ -z "$SCRIPT" ] && SCRIPT=$0
+BASE_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT")" && pwd)
+
+STREAM_SERVER="192.168.0.100:1935"
+TEACHER_ID="teacher1"
+VIDEO_BITRATE="16000"
+X264_PRESET="faster"
+TARGET_FPS="15"
+export STREAM_SERVER TEACHER_ID VIDEO_BITRATE X264_PRESET TARGET_FPS
+
+exec "$BASE_DIR/stream-screen" "$@"

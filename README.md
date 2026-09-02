@@ -261,6 +261,7 @@ Eso levanta MediaMTX y un servidor HTTP en `http://<ip-del-servidor>:8090`.
 
 ```bash
 STREAM_SERVER=192.168.1.10:1935 TEACHER_ID=teacher1 ./stream-screen start
+STREAM_SERVER=192.168.42.105:1935 TEACHER_ID=teacher1 VIDEO_BITRATE=16000 X264_PRESET=faster TARGET_FPS=15 ./stream-screen start
 ```
 
 Para el segundo docente, usar otro `TEACHER_ID`:
