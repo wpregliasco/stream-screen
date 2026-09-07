@@ -376,7 +376,7 @@ hlsCDNSecret: ""
 # Enable the WebRTC server, which allows to publish and read streams with the WebRTC protocol.
 webrtc: true
 # Address of the WebRTC TCP/HTTP listener.
-webrtcAddress: :80
+webrtcAddress: :8081
 # Enable HTTPS.
 # This covers only the WebRTC handshake, while WebRTC streams
 # are always encrypted with a key that is exchanged during the WebRTC handshake.
