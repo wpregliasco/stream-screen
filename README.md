@@ -291,3 +291,37 @@ http://<ip-del-servidor>:8888/teacher2/index.m3u8
 
 - HLS (puerto `8888`) es el recomendado para más de 10 alumnos porque se sirve como HTTP puro.
 - WebRTC (puerto `80`) consume más recursos del servidor; evitarlo para muchos espectadores.
+
+## 8. Intercambio de código con los alumnos (carpeta `Compartidos`)
+
+Además del streaming, el servidor del aula (JupyterHub / TLJH) tiene una carpeta compartida
+con permiso de **lectura y escritura para todos** (alumnos y docentes), pensada para el flujo
+de corrección en vivo:
+
+```
+1. El alumno sube su archivo a la carpeta `Compartidos` desde la web de JupyterHub
+   (arrastrar y soltar en http://<ip-del-servidor>/).
+2. El docente abre el archivo con VS Code Remote-SSH en el servidor:
+   /opt/tljh/shared/compartidos/<archivo>
+   mientras transmite su pantalla con stream-screen-1.
+3. Al guardar, el alumno ve la versión corregida en la misma carpeta `Compartidos`
+   y la descarga desde Jupyter.
+```
+
+### Cómo está armado (en el servidor)
+
+- Carpeta real: `/opt/tljh/shared/compartidos`, grupo `jupyterhub-users`, `chmod 2770`,
+  con ACLs `g:jupyterhub-users:rwx` y `g:docentes:rwx` (más las ACL por defecto para que
+  los archivos nuevos hereden los permisos de grupo).
+- Los docentes (`willy`, `mgb`) acceden por pertenecer al grupo `docentes`; no hace falta
+  agregarlos a `jupyterhub-users`.
+- El symlink `~/Compartidos` se crea automáticamente en el home de cada usuario jupyter
+  al iniciar su servidor, vía el hook `pre_spawn_hook` en
+  `/opt/tljh/config/jupyterhub_config.d/shared_tps.py` (el mismo que crea `~/TPs`).
+- Si el usuario ya tenía su servidor Jupyter corriendo, el symlink aparece recién cuando
+  lo reinicia (File → Hub Control Panel → Stop/Start).
+
+### Advertencia
+
+Todos los usuarios pueden ver, modificar y borrar los archivos de todos dentro de
+`Compartidos`. Es una carpeta de trabajo de clase, no un lugar de entrega formal.
