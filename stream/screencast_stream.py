@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
 """
-Captura de pantalla vía xdg-desktop-portal ScreenCast (COSMIC) -> GStreamer -> RTMP -> MediaMTX
+Captura de pantalla -> GStreamer -> RTMP -> MediaMTX
+
+Dos modos de captura, elegidos automáticamente:
+  - portal: xdg-desktop-portal ScreenCast + PipeWire (Wayland, o GNOME en X11)
+  - x11:    ximagesrc (X11 sin portal ScreenCast, p.ej. MATE/XFCE)
+
+Se puede forzar con la variable de entorno CAPTURE=portal | x11 | auto (default: auto)
 
 Requiere:
     sudo apt install python3-dbus python3-gi gir1.2-gstreamer-1.0 gstreamer1.0-vaapi
+    (para el modo x11: x11-utils y gstreamer1.0-plugins-good con ximagesrc)
 
 Uso:
     python3 screencast_stream.py
-    (COSMIC va a mostrar el selector de pantalla/ventana la primera vez que corras esto)
+    (en modo portal aparece el selector de pantalla/ventana la primera vez)
 """
 
 import os
+import re
 import sys
 import random
 import socket
+import subprocess
 import dbus
 import dbus.mainloop.glib
 from gi.repository import GLib
@@ -39,11 +48,27 @@ SCREENCAST_IFACE = "org.freedesktop.portal.ScreenCast"
 REQUEST_IFACE = "org.freedesktop.portal.Request"
 
 bus = dbus.SessionBus()
-portal = bus.get_object(PORTAL_BUS_NAME, PORTAL_OBJECT_PATH)
-screencast = dbus.Interface(portal, SCREENCAST_IFACE)
+try:
+    portal = bus.get_object(PORTAL_BUS_NAME, PORTAL_OBJECT_PATH)
+    screencast = dbus.Interface(portal, SCREENCAST_IFACE)
+except Exception:
+    portal = None
+    screencast = None
 
 # nombre único del bus, escapado como pide la spec del portal
 sender_escaped = bus.get_unique_name()[1:].replace(".", "_")
+
+
+def portal_screencast_available():
+    """True si el portal expone la interfaz ScreenCast (no alcanza con que exista el portal)."""
+    if portal is None:
+        return False
+    try:
+        props = dbus.Interface(portal, "org.freedesktop.DBus.Properties")
+        props.Get(SCREENCAST_IFACE, "version")
+        return True
+    except Exception:
+        return False
 
 loop = GLib.MainLoop()
 state = {}
@@ -133,8 +158,27 @@ def step4_open_pipewire_remote():
     loop.quit()
 
 
-step1_create_session()
-loop.run()
+# --- Elegir modo de captura ---
+
+CAPTURE_MODE = os.environ.get("CAPTURE", "auto").lower()
+
+if CAPTURE_MODE == "auto":
+    if portal_screencast_available():
+        CAPTURE_MODE = "portal"
+    elif os.environ.get("DISPLAY"):
+        CAPTURE_MODE = "x11"
+    else:
+        print("ERROR: no hay portal ScreenCast ni sesión X11 (DISPLAY vacío).")
+        sys.exit(1)
+
+print(f"Modo de captura: {CAPTURE_MODE}")
+
+if CAPTURE_MODE == "portal":
+    step1_create_session()
+    loop.run()
+elif CAPTURE_MODE != "x11":
+    print(f"ERROR: CAPTURE={CAPTURE_MODE} no reconocido (usar portal, x11 o auto).")
+    sys.exit(1)
 
 # --- Handshake terminado, arrancamos GStreamer en este mismo proceso ---
 
@@ -144,21 +188,30 @@ from gi.repository import Gst
 
 Gst.init(None)
 
-node_id = state["node_id"]
-fd = state["fd"]
-meta = state.get("stream_meta", {})
-
-# Intentamos extraer el tamaño real del metadato del portal, sino usamos 1920x1080@30
+# Tamaño de la fuente: metadato del portal, o dimensiones del display X11
 width, height = 1920, 1080
 framerate = "30/1"
 
-try:
-    size = meta.get("size") or meta.get("Size")
-    if size:
-        width = int(size[0])
-        height = int(size[1])
-except Exception as e:
-    print(f"    no se pudo leer 'size' del portal: {e}")
+if CAPTURE_MODE == "portal":
+    node_id = state["node_id"]
+    fd = state["fd"]
+    meta = state.get("stream_meta", {})
+    try:
+        size = meta.get("size") or meta.get("Size")
+        if size:
+            width = int(size[0])
+            height = int(size[1])
+    except Exception as e:
+        print(f"    no se pudo leer 'size' del portal: {e}")
+else:
+    try:
+        out = subprocess.check_output(["xdpyinfo"], text=True)
+        m = re.search(r"dimensions:\s+(\d+)x(\d+)", out)
+        if m:
+            width, height = int(m.group(1)), int(m.group(2))
+    except Exception as e:
+        print(f"    no se pudo leer el tamaño con xdpyinfo: {e}")
+    print(f"    tamaño de pantalla X11: {width}x{height}")
 
 RTMP_URL = os.environ.get("RTMP_URL", "rtmp://127.0.0.1:1935/screen")
 LAN_IP = _get_lan_ip()
@@ -190,7 +243,26 @@ id_props = ["path", "target-object"]
 
 candidates = []
 
-for id_prop in id_props:
+if CAPTURE_MODE == "x11":
+    # Captura X11 directa: pantalla completa, con cursor.
+    # use-damage=0 evita el modo incremental, que rinde mal para video.
+    candidates.append((
+        "x264 ximagesrc",
+        (
+            f"ximagesrc use-damage=0 show-pointer=true do-timestamp=true ! "
+            f"video/x-raw, framerate={TARGET_FPS}/1 ! "
+            f"videoconvert ! "
+            f"videoscale ! "
+            f"video/x-raw, format=I420, width={enc_width}, height={enc_height} ! "
+            f"queue max-size-buffers=2 leaky=downstream ! "
+            f"x264enc tune=zerolatency speed-preset={X264_PRESET} bitrate={VIDEO_BITRATE} key-int-max={KEY_INT} ! "
+            f"h264parse config-interval=1 ! "
+            f"flvmux streamable=true ! "
+            f"rtmpsink location={RTMP_URL}"
+        )
+    ))
+
+for id_prop in (id_props if CAPTURE_MODE == "portal" else []):
     for fmt in formats:
         candidates.append((
             f"x264 {id_prop} {fmt}",
@@ -212,7 +284,7 @@ for id_prop in id_props:
         ))
 
 # VAAPI como último recurso con el formato más común
-for id_prop in id_props:
+for id_prop in (id_props if CAPTURE_MODE == "portal" else []):
     candidates.append((
         f"vaapi {id_prop} BGRx",
         (

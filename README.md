@@ -19,10 +19,29 @@ stream/screencast_stream.py  →  GStreamer  →  RTMP  →  MediaMTX
 ```
 
 | Archivo / directorio | Función |
-|---|---|
+| --- | --- |
 | `stream/screencast_stream.py` | Negocia con el portal de captura y lanza el pipeline de GStreamer. |
 | `mediamtx/mediamtx` | Servidor que recibe RTMP y sirve HLS / WebRTC. |
 | `mediamtx/mediamtx.yml` | Configuración de MediaMTX: puertos, protocolos, paths. |
+
+## 0. Modos de captura (Wayland vs X11)
+
+El script elige automáticamente el modo de captura:
+
+| Modo | Cuándo se usa | Requiere |
+| --- | --- | --- |
+| `portal` | Wayland, o X11 con portal ScreenCast (GNOME) | xdg-desktop-portal + PipeWire |
+| `x11` | X11 sin portal ScreenCast (MATE, XFCE, i3...) | `ximagesrc` (gstreamer1.0-plugins-good) y `xdpyinfo` (x11-utils) |
+
+Se puede forzar con la variable de entorno `CAPTURE`:
+
+```bash
+CAPTURE=x11 ./stream-screen start      # forzar captura X11
+CAPTURE=portal ./stream-screen start   # forzar portal
+```
+
+Diferencias del modo `x11`: captura siempre la **pantalla completa** (no hay selector
+de ventana) y no muestra ningún diálogo al iniciar.
 
 ## 1. Captura: `xdg-desktop-portal` + PipeWire
 
@@ -61,7 +80,7 @@ pipewiresrc fd=<fd> path=<node_id> do-timestamp=true
 ### Qué hace cada paso
 
 | Elemento / parámetro | Para qué sirve |
-|---|---|
+| --- | --- |
 | `pipewiresrc` | Recibe los frames crudos desde PipeWire (portal). |
 | `fd=<fd>` | File descriptor que devuelve el portal para la conexión PipeWire. |
 | `path=<node_id>` | Identificador del nodo PipeWire. Es el formato esperado por `pipewiresrc`. |
@@ -114,7 +133,7 @@ webrtcLocalUDPAddress: :8189
 ```
 
 | Servicio | Puerto | URL de consumo |
-|---|---|---|
+| --- | --- | --- |
 | RTMP (publicación) | `1935/tcp` | `rtmp://127.0.0.1:1935/screen` |
 | HLS | `8888/tcp` | `http://<ip>:8888/screen/index.m3u8` |
 | WebRTC | `80/tcp` + `8189/udp` | `http://<ip>/screen` |
