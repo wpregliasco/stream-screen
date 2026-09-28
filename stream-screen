@@ -22,6 +22,13 @@ usage() {
     echo "  TEACHER_ID     Stream path, e.g. teacher1 (default: screen)"
 }
 
+# atch es opcional: si no está instalado, se usa nohup + pkill
+if command -v atch >/dev/null 2>&1; then
+    HAS_ATCH=1
+else
+    HAS_ATCH=0
+fi
+
 session_exists() {
     atch list | grep -qE "^$1([[:space:]]|$)"
 }
@@ -30,11 +37,20 @@ start() {
     TEACHER_ID="${TEACHER_ID:-screen}"
 
     if [ -z "$STREAM_SERVER" ]; then
-        if session_exists "$MEDIA_SESSION"; then
-            echo "MediaMTX already running in atch session $MEDIA_SESSION"
+        if [ "$HAS_ATCH" = 1 ]; then
+            if session_exists "$MEDIA_SESSION"; then
+                echo "MediaMTX already running in atch session $MEDIA_SESSION"
+            else
+                atch start "$MEDIA_SESSION" sh -c "cd '$MEDIA_DIR' && exec '$MEDIA_BIN'"
+                echo "MediaMTX started in atch session $MEDIA_SESSION"
+            fi
         else
-            atch start "$MEDIA_SESSION" sh -c "cd '$MEDIA_DIR' && exec '$MEDIA_BIN'"
-            echo "MediaMTX started in atch session $MEDIA_SESSION"
+            if pgrep -x mediamtx >/dev/null 2>&1; then
+                echo "MediaMTX already running"
+            else
+                nohup sh -c "cd '$MEDIA_DIR' && exec '$MEDIA_BIN'" >/tmp/stream-screen-mediamtx.log 2>&1 &
+                echo "MediaMTX started (log: /tmp/stream-screen-mediamtx.log)"
+            fi
         fi
         RTMP_URL="rtmp://127.0.0.1:1935/$TEACHER_ID"
     else
@@ -42,24 +58,30 @@ start() {
         RTMP_URL="rtmp://$STREAM_SERVER/$TEACHER_ID"
     fi
 
-    if session_exists "$CAST_SESSION"; then
-        atch kill "$CAST_SESSION"
+    if [ "$HAS_ATCH" = 1 ]; then
+        if session_exists "$CAST_SESSION"; then
+            atch kill "$CAST_SESSION"
+        fi
+        atch start "$CAST_SESSION" env RTMP_URL="$RTMP_URL" python3 "$CAST_SCRIPT"
+        echo "screencast_stream.py started in atch session $CAST_SESSION"
+    else
+        pkill -f "screencast_stream.py" 2>/dev/null
+        nohup env RTMP_URL="$RTMP_URL" python3 "$CAST_SCRIPT" >/tmp/stream-screen-cast.log 2>&1 &
+        echo "screencast_stream.py started (log: /tmp/stream-screen-cast.log)"
     fi
-
-    atch start "$CAST_SESSION" env RTMP_URL="$RTMP_URL" python3 "$CAST_SCRIPT"
-    echo "screencast_stream.py started in atch session $CAST_SESSION"
     echo "  publishing to $RTMP_URL"
 }
 
 stop() {
-    if session_exists "$CAST_SESSION"; then
-        atch kill "$CAST_SESSION"
+    if [ "$HAS_ATCH" = 1 ]; then
+        if session_exists "$CAST_SESSION"; then
+            atch kill "$CAST_SESSION"
+        fi
+        if session_exists "$MEDIA_SESSION"; then
+            atch kill "$MEDIA_SESSION"
+        fi
     fi
     pkill -f "screencast_stream.py"
-
-    if session_exists "$MEDIA_SESSION"; then
-        atch kill "$MEDIA_SESSION"
-    fi
     pkill mediamtx
 
     echo "stream stopped"
